@@ -18,9 +18,9 @@ async def main():
                     for tool in t[1]:
                         print(tool)
 
-            # Call the fetch tool
-            result = await session.call_tool("compile_java",
-                {
+            # Call tool
+            result = await session.call_tool(
+                "compile_java", {
                     "java_files": [os.getcwd() + "/tests/src/com/examples/HelloWorld.java"],
                     "output_dir": os.getcwd() + "/bin"
                 }
@@ -33,7 +33,20 @@ async def main():
                 }
             )
             print(result)
-
+            result = await session.call_tool(
+                "run_junit", {
+                    "output_dir": os.getcwd() + "/bin",
+                    "package_name": "com.example"
+                }
+            )
+            print(result)
+            result = await session.call_tool(
+                "generate_coverage", {
+                    "output_dir": os.getcwd() + "/bin",
+                    "package_name": "com.example"
+                }
+            )
+            print(result)
 
 
 asyncio.run(main())
