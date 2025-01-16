@@ -3,6 +3,7 @@ import os
 import subprocess
 import xml.etree.ElementTree as ET
 from typing import Optional, List
+import glob
 
 from mcp.server.models import InitializationOptions
 import mcp.types as types
@@ -12,12 +13,12 @@ import mcp.server.stdio
 server = Server("java_test_mcp")
 
 # クライアントのワークスペースパスを取得
-client_workspace = os.environ.get('MCP_WORKSPACE', '')
+workspace_path = os.environ.get('JAVA_BUILD_WORKSPACE', os.curdir)
 
-def resolve_client_path(relative_path: str) -> str:
+def resolve_workspace_path(relative_path: str) -> str:
     if os.path.isabs(relative_path):
         return relative_path
-    return os.path.join(client_workspace, relative_path)
+    return os.path.join(workspace_path, relative_path)
 
 def resolve_classpath(classpath: Optional[str]) -> str:
     """
@@ -33,14 +34,15 @@ def resolve_classpath(classpath: Optional[str]) -> str:
     for entry in entries:
         if '*' in entry:
             base_dir = os.path.dirname(entry)
-            pattern = os.path.basename(entry)
-            base_dir = resolve_client_path(base_dir)
-            
-            import glob
-            matched_files = glob.glob(os.path.join(base_dir, pattern))
+            base_dir = resolve_workspace_path(base_dir)
+            pattern = os.path.join(base_dir, os.path.basename(entry))
+            if '**' in pattern:
+                matched_files = glob.glob(pattern, recursive=True)
+            else:
+                matched_files = glob.glob(pattern)
             resolved_entries.extend(matched_files)
         else:
-            resolved_entries.append(resolve_client_path(entry))
+            resolved_entries.append(resolve_workspace_path(entry))
             
     return ":".join(resolved_entries)
 
@@ -52,14 +54,15 @@ def resolve_file_list(files: List[str]) -> List[str]:
     for file_path in files:
         if '*' in file_path:
             base_dir = os.path.dirname(file_path)
-            pattern = os.path.basename(file_path)
-            base_dir = resolve_client_path(base_dir)
-            
-            import glob
-            matched_files = glob.glob(os.path.join(base_dir, pattern))
+            base_dir = resolve_workspace_path(base_dir)
+            pattern = os.path.join(base_dir, os.path.basename(file_path))
+            if '**' in pattern:
+                matched_files = glob.glob(pattern, recursive=True)
+            else:
+                matched_files = glob.glob(pattern)
             resolved_files.extend(matched_files)
         else:
-            resolved_files.append(resolve_client_path(file_path))
+            resolved_files.append(resolve_workspace_path(file_path))
     return resolved_files
 
 @server.list_tools()
@@ -157,6 +160,7 @@ async def handle_call_tool(
         else:
             raise ValueError(f"Unknown tool: {name}")
     except subprocess.CalledProcessError as e:
+        raise e
         return [
             types.TextContent(
                 type="text",
@@ -173,7 +177,7 @@ async def handle_call_tool(
 
 async def compile_java(arguments: dict) -> list[types.TextContent]:
     java_files = arguments.get("java_files", [])
-    output_dir = resolve_client_path(arguments.get("output_dir", "bin"))
+    output_dir = resolve_workspace_path(arguments.get("output_dir", "bin"))
     classpath = resolve_classpath(arguments.get("classpath"))
 
     resolved_files = resolve_file_list(java_files)
@@ -181,7 +185,6 @@ async def compile_java(arguments: dict) -> list[types.TextContent]:
         raise ValueError("No Java files found to compile")
 
     os.makedirs(output_dir, exist_ok=True)
-
     cmd = [
         "javac",
         "-d", output_dir,
@@ -210,7 +213,7 @@ async def compile_java(arguments: dict) -> list[types.TextContent]:
 
 async def compile_junit(arguments: dict) -> list[types.TextContent]:
     test_files = arguments.get("java_test_files", [])
-    output_dir = resolve_client_path(arguments.get("output_dir", "bin"))
+    output_dir = resolve_workspace_path(arguments.get("output_dir", "bin"))
     classpath = resolve_classpath(arguments.get("classpath"))
 
     resolved_files = resolve_file_list(test_files)
@@ -222,7 +225,7 @@ async def compile_junit(arguments: dict) -> list[types.TextContent]:
     cmd = [
         "javac",
         "-d", output_dir,
-        "-cp", f".:{classpath}:{client_workspace}/junit.jar",
+        "-cp", f".:{classpath}:{output_dir}:{workspace_path}/junit.jar",
         *resolved_files
     ]
     
@@ -247,17 +250,17 @@ async def compile_junit(arguments: dict) -> list[types.TextContent]:
 
 async def run_junit(arguments: dict) -> list[types.TextContent]:
     package_name = arguments.get("package_name", "")
-    output_dir = resolve_client_path(arguments.get("output_dir", "bin"))
-    classpath = resolve_classpath(arguments.get("classpath", "."))
+    output_dir = resolve_workspace_path(arguments.get("output_dir", "bin"))
+    classpath = resolve_classpath(arguments.get("classpath", ""))
     test_classes = arguments.get("test_classes", [])
 
     junit_includes = f"{package_name}.*" if package_name else ".*"
     
     cmd = [
         "java",
-        f"-javaagent:{client_workspace}/jacocoagent.jar=destfile={client_workspace}/jacoco.exec,includes={junit_includes}",
+        f"-javaagent:{workspace_path}/jacocoagent.jar=destfile={workspace_path}/jacoco.exec,includes={junit_includes}",
         "-cp",
-        f"{output_dir}:{client_workspace}/{classpath}:{client_workspace}/junit.jar",
+        f"{output_dir}:{workspace_path}/{classpath}:{workspace_path}/junit.jar",
         "org.junit.platform.console.ConsoleLauncher",
     ]
 
@@ -287,24 +290,24 @@ async def run_junit(arguments: dict) -> list[types.TextContent]:
     ]
 
 async def generate_coverage(arguments: dict) -> list[types.TextContent]:
-    output_dir = resolve_client_path(arguments.get("output_dir", "bin"))
+    output_dir = resolve_workspace_path(arguments.get("output_dir", "bin"))
     package_name = arguments.get("package_name", "")
     
     jacoco_classfiles = f"{output_dir}/{package_name.replace('.', '/')}" if package_name else output_dir
-    os.makedirs(f"{client_workspace}/jacoco-report", exist_ok=True)
+    os.makedirs(f"{workspace_path}/jacoco-report", exist_ok=True)
     
     cmd = [
         "java",
         "-jar",
-        f"{client_workspace}/jacococli.jar",
+        f"{workspace_path}/jacococli.jar",
         "report",
-        f"{client_workspace}/jacoco.exec",
+        f"{workspace_path}/jacoco.exec",
         "--classfiles",
         jacoco_classfiles,
         "--sourcefiles",
         ".",
         "--xml",
-        f"{client_workspace}/jacoco-report/jacoco.xml"
+        f"{workspace_path}/jacoco-report/jacoco.xml"
     ]
     
     process = await asyncio.create_subprocess_exec(
@@ -332,7 +335,7 @@ def parse_coverage_report() -> dict:
     Parse Jacoco coverage report XML and extract coverage data
     """
     coverage_data = {}
-    tree = ET.parse(f"{client_workspace}/jacoco-report/jacoco.xml")
+    tree = ET.parse(f"{workspace_path}/jacoco-report/jacoco.xml")
     root = tree.getroot()
     
     for package in root.findall(".//package"):
