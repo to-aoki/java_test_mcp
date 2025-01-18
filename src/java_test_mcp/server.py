@@ -12,8 +12,18 @@ import mcp.server.stdio
 
 server = Server("java_test_mcp")
 
-# クライアントのワークスペースパスを取得
-workspace_path = os.environ.get('JAVA_BUILD_WORKSPACE', os.curdir)
+workspace_path = os.environ.get('JAVA_BUILD_WORKSPACE', './junit_jacoco_jar_path')
+
+if not os.path.isdir(workspace_path):
+    from .download_jar import download, extract_files
+    jacoco_url = "https://search.maven.org/remotecontent?filepath=org/jacoco/jacoco/0.8.12/jacoco-0.8.12.zip"
+    junit_url =  "https://oss.sonatype.org/content/repositories/snapshots/org/junit/platform/junit-platform-console-standalone/1.10.6-SNAPSHOT/junit-platform-console-standalone-1.10.6-20241004.130129-1.jar"
+    temp_jacoco_file = os.path.join(workspace_path, jacoco_url.split("/")[-1])
+    os.makedirs(workspace_path)
+    download(jacoco_url, temp_jacoco_file)
+    extract_files(temp_jacoco_file, workspace_path)
+    os.remove(temp_jacoco_file)
+    download(junit_url, os.path.join(workspace_path, "junit.jar"))
 
 def resolve_workspace_path(relative_path: str) -> str:
     if os.path.isabs(relative_path):
