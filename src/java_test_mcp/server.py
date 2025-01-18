@@ -4,6 +4,7 @@ import subprocess
 import xml.etree.ElementTree as ET
 from typing import Optional, List
 import glob
+import re
 
 from mcp.server.models import InitializationOptions
 import mcp.types as types
@@ -84,7 +85,7 @@ async def handle_list_tools() -> list[types.Tool]:
     """
     return [
         types.Tool(
-            name="compile_java",
+            name="java_compile",
             description="Compile Java source files",
             inputSchema={
                 "type": "object",
@@ -101,7 +102,7 @@ async def handle_list_tools() -> list[types.Tool]:
             },
         ),
         types.Tool(
-            name="compile_junit",
+            name="junit_compile",
             description="Compile JUnit test files",
             inputSchema={
                 "type": "object",
@@ -160,10 +161,10 @@ async def handle_call_tool(
         raise ValueError("Missing arguments")
 
     try:
-        if name == "compile_java":
-            return await compile_java(arguments)
-        elif name == "compile_junit":
-            return await compile_junit(arguments)
+        if name == "java_compile":
+            return await java_compile(arguments)
+        elif name == "junit_compile":
+            return await junit_compile(arguments)
         elif name == "run_junit":
             return await run_junit(arguments)
         elif name == "generate_coverage":
@@ -186,78 +187,103 @@ async def handle_call_tool(
             )
         ]
 
-async def compile_java(arguments: dict) -> list[types.TextContent]:
-    java_files = arguments.get("java_files", [])
-    output_dir = resolve_workspace_path(arguments.get("output_dir", "bin"))
-    classpath = resolve_classpath(arguments.get("classpath"))
 
-    resolved_files = resolve_file_list(java_files)
+async def compile_java_files(
+        files: List[str],
+        output_dir: str,
+        classpath: str,
+        additional_classpath: str = ""
+) -> list[types.TextContent]:
+    resolved_files = resolve_file_list(files)
     if not resolved_files:
         raise ValueError("No Java files found to compile")
 
     os.makedirs(output_dir, exist_ok=True)
+
+    full_classpath = f".:{classpath}"
+    if additional_classpath:
+        full_classpath = f"{full_classpath}:{additional_classpath}"
+
     cmd = [
         "javac",
         "-d", output_dir,
-        "-cp", f".:{classpath}",
+        "-cp", full_classpath,
         *resolved_files
     ]
-    
+
     process = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE
     )
     stdout, stderr = await process.communicate()
-    
+
     if process.returncode != 0:
-        raise subprocess.CalledProcessError(
-            process.returncode, cmd, stdout, stderr
+        try:
+            stderr_decoded = stderr.decode('utf-8')
+        except UnicodeDecodeError:
+            stderr_decoded = stderr.decode('utf-8', errors='replace')
+        error_files = set()
+        error_pattern = re.compile(r"(.*\.java):")  # tests/src/com/examples/HelloWorldTest.java:11: error: ...
+        for line in stderr_decoded.splitlines():
+            match = error_pattern.search(line)
+            if match:
+                error_files.add(match.group(1))
+
+        error_files = set(error_files)
+        resolved_files = set(resolved_files) - error_files
+        if len(resolved_files) == 0:
+            raise subprocess.CalledProcessError(
+                process.returncode, cmd, stdout, stderr
+            )
+
+        cmd = [
+            "javac",
+            "-d", output_dir,
+            "-cp", full_classpath,
+            *resolved_files
+        ]
+
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
         )
-    
+        stdout, stderr = await process.communicate()
+
+        if process.returncode != 0:
+            raise subprocess.CalledProcessError(
+                process.returncode, cmd, stdout, stderr
+            )
+        return [
+            types.TextContent(
+                type="text",
+                text=f"Successfully compiled {len(resolved_files)} files. Compilation failed files: {", ".join(error_files)}"
+            )
+        ]
     return [
         types.TextContent(
             type="text",
-            text=f"Successfully compiled {len(resolved_files)} Java files"
+            text=f"Successfully compiled {len(resolved_files)} files"
         )
     ]
 
-async def compile_junit(arguments: dict) -> list[types.TextContent]:
-    test_files = arguments.get("java_test_files", [])
+
+async def java_compile(arguments: dict) -> list[types.TextContent]:
+    java_files = arguments.get("java_files", [])
     output_dir = resolve_workspace_path(arguments.get("output_dir", "bin"))
     classpath = resolve_classpath(arguments.get("classpath"))
 
-    resolved_files = resolve_file_list(test_files)
-    if not resolved_files:
-        raise ValueError("No test files found to compile")
-    
-    os.makedirs(output_dir, exist_ok=True)
-    
-    cmd = [
-        "javac",
-        "-d", output_dir,
-        "-cp", f".:{classpath}:{output_dir}:{workspace_path}/junit.jar",
-        *resolved_files
-    ]
-    
-    process = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE
-    )
-    stdout, stderr = await process.communicate()
-    
-    if process.returncode != 0:
-        raise subprocess.CalledProcessError(
-            process.returncode, cmd, stdout, stderr
-        )
-    
-    return [
-        types.TextContent(
-            type="text",
-            text=f"Successfully compiled {len(resolved_files)} test files"
-        )
-    ]
+    return await compile_java_files(java_files, output_dir, classpath)
+
+
+async def junit_compile(arguments: dict) -> list[types.TextContent]:
+    test_files = arguments.get("java_test_files", [])
+    output_dir = resolve_workspace_path(arguments.get("output_dir", "bin"))
+    classpath = resolve_classpath(arguments.get("classpath"))
+    junit_classpath = f"{output_dir}:{workspace_path}/junit.jar"
+
+    return await compile_java_files(test_files, output_dir, classpath, junit_classpath)
 
 async def run_junit(arguments: dict) -> list[types.TextContent]:
     package_name = arguments.get("package_name", "")

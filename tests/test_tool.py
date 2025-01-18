@@ -20,14 +20,14 @@ async def main():
 
             # Call tool
             result = await session.call_tool(
-                "compile_java", {
-                    "java_files": [os.getcwd() + "/tests/src/com/examples/HelloWorld.java"],
+                "java_compile", {
+                    "java_files": [os.getcwd() + "/tests/src/com/examples/*.java"],
                     "output_dir": os.getcwd() + "/bin"
                 }
             )
             print(result)
             result = await session.call_tool(
-                "compile_junit", {
+                "junit_compile", {
                     "java_test_files": [os.getcwd() + "/tests/src/**/*Test.java"],
                     "output_dir": os.getcwd() + "/bin"
                 }
