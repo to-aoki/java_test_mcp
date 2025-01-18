@@ -96,7 +96,7 @@ async def handle_list_tools() -> list[types.Tool]:
                         "description": "List of Java source files or patterns (e.g. src/**/*.java)"
                     },
                     "classpath": {"type": "string"},
-                    "output_dir": {"type": "string", "description": "default values: ./bin"},
+                    "output_dir": {"type": "string", "description": "default values: main/bin"},
                 },
                 "required": ["java_files"]
             },
@@ -113,7 +113,8 @@ async def handle_list_tools() -> list[types.Tool]:
                         "description": "List of Java test files or patterns (e.g. test/**/*Test.java)"
                     },
                     "classpath": {"type": "string"},
-                    "output_dir": {"type": "string", "description": "default values: ./bin"},
+                    "target_dir": {"type": "string", "description": "default values: main/bin"},
+                    "output_dir": {"type": "string", "description": "default values: test/bin"},
                 },
                 "required": ["java_test_files"]
             },
@@ -125,7 +126,8 @@ async def handle_list_tools() -> list[types.Tool]:
                 "type": "object",
                 "properties": {
                     "classpath": {"type": "string"},
-                    "output_dir": {"type": "string", "description": "default values: ./bin"},
+                    "target_dir": {"type": "string", "description": "default values: main/bin"},
+                    "test_dir": {"type": "string", "description": "default values: test/bin"},
                     "package_name": {"type": "string"},
                     "test_classes": {
                         "type": "array",
@@ -271,7 +273,7 @@ async def compile_java_files(
 
 async def java_compile(arguments: dict) -> list[types.TextContent]:
     java_files = arguments.get("java_files", [])
-    output_dir = resolve_workspace_path(arguments.get("output_dir", "bin"))
+    output_dir = resolve_workspace_path(arguments.get("output_dir", "main/bin"))
     classpath = resolve_classpath(arguments.get("classpath"))
 
     return await compile_java_files(java_files, output_dir, classpath)
@@ -279,15 +281,17 @@ async def java_compile(arguments: dict) -> list[types.TextContent]:
 
 async def junit_compile(arguments: dict) -> list[types.TextContent]:
     test_files = arguments.get("java_test_files", [])
-    output_dir = resolve_workspace_path(arguments.get("output_dir", "bin"))
+    target_dir = resolve_workspace_path(arguments.get("target_dir", "main/bin"))
+    output_dir = resolve_workspace_path(arguments.get("output_dir", "test/bin"))
     classpath = resolve_classpath(arguments.get("classpath"))
-    junit_classpath = f"{output_dir}:{workspace_path}/junit.jar"
+    junit_classpath = f"{target_dir}:{workspace_path}/junit.jar"
 
     return await compile_java_files(test_files, output_dir, classpath, junit_classpath)
 
 async def run_junit(arguments: dict) -> list[types.TextContent]:
     package_name = arguments.get("package_name", "")
-    output_dir = resolve_workspace_path(arguments.get("output_dir", "bin"))
+    target_dir = resolve_workspace_path(arguments.get("target_dir", "main/bin"))
+    test_dir = resolve_workspace_path(arguments.get("test_dir", "test/bin"))
     classpath = resolve_classpath(arguments.get("classpath", ""))
     test_classes = arguments.get("test_classes", [])
 
@@ -297,7 +301,7 @@ async def run_junit(arguments: dict) -> list[types.TextContent]:
         "java",
         f"-javaagent:{workspace_path}/jacocoagent.jar=destfile={workspace_path}/jacoco.exec,includes={junit_includes}",
         "-cp",
-        f"{output_dir}:{workspace_path}/{classpath}:{workspace_path}/junit.jar",
+        f"{target_dir}:{test_dir}:{workspace_path}/{classpath}:{workspace_path}/junit.jar",
         "org.junit.platform.console.ConsoleLauncher",
     ]
 
@@ -305,7 +309,7 @@ async def run_junit(arguments: dict) -> list[types.TextContent]:
         for test_class in test_classes:
             cmd.extend(["--select-class", package_name + '.' + test_class])
     else:
-        cmd.extend(["--scan-classpath", output_dir])
+        cmd.extend(["--scan-classpath", test_dir])
     
     process = await asyncio.create_subprocess_exec(
         *cmd,
@@ -327,9 +331,8 @@ async def run_junit(arguments: dict) -> list[types.TextContent]:
     ]
 
 async def generate_coverage(arguments: dict) -> list[types.TextContent]:
-    classfiles = resolve_workspace_path(arguments.get("classfiles_root_path", "bin"))
+    classfiles = resolve_workspace_path(arguments.get("classfiles_root_path", "main/bin"))
     package_name = arguments.get("package_name", "")
-    
     jacoco_classfiles = f"{classfiles}/{package_name.replace('.', '/')}" if package_name else classfiles
     os.makedirs(f"{workspace_path}/jacoco-report", exist_ok=True)
     

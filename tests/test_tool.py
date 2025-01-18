@@ -21,29 +21,31 @@ async def main():
             # Call tool
             result = await session.call_tool(
                 "java_compile", {
-                    "java_files": [os.getcwd() + "/tests/src/com/examples/*.java"],
-                    "output_dir": os.getcwd() + "/bin"
+                    "java_files": [os.getcwd() + "/tests/main/src/com/examples/*.java"],
+                    "output_dir": os.getcwd() + "/main/bin"
                 }
             )
             print(result)
             result = await session.call_tool(
                 "junit_compile", {
-                    "java_test_files": [os.getcwd() + "/tests/src/**/*Test.java"],
-                    "output_dir": os.getcwd() + "/bin"
+                    "java_test_files": [os.getcwd() + "/tests/main/test/**/*Test.java"],
+                    "target_dir": os.getcwd() + "/main/bin",
+                    "output_dir": os.getcwd() + "/test/bin"
                 }
             )
             print(result)
             result = await session.call_tool(
                 "run_junit", {
-                    "output_dir": os.getcwd() + "/bin",
+                    "target_dir": os.getcwd() + "/main/bin",
+                    "test_dir": os.getcwd() + "/test/bin",
                     "package_name": "com.example"
                 }
             )
             print(result)
             result = await session.call_tool(
                 "generate_coverage", {
-                    "output_dir": os.getcwd() + "/bin",
-                    "package_name": "com.example"
+                    "classfiles_root_path": os.getcwd() + "/main/bin",
+                    "package_name": "com.example",
                 }
             )
             print(result)
