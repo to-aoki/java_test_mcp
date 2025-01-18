@@ -14,7 +14,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
 ]
-dependencies = ["anyio>=4.5", "pytest", "mcp"]
+dependencies = ["anyio>=4.5", "pytest", "requests", "mcp"]
 
 [project.scripts]
 java_test_mcp= "java_test_mcp:main"
