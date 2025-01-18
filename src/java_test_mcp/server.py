@@ -13,6 +13,7 @@ import mcp.server.stdio
 server = Server("java_test_mcp")
 
 workspace_path = os.environ.get('JAVA_BUILD_WORKSPACE', './junit_jacoco_jar_path')
+client_workspace_path = os.environ.get("CLIENT_WORKSPACE", '.')
 
 if not os.path.isdir(workspace_path):
     from .download_jar import download, extract_files
@@ -28,7 +29,7 @@ if not os.path.isdir(workspace_path):
 def resolve_workspace_path(relative_path: str) -> str:
     if os.path.isabs(relative_path):
         return relative_path
-    return os.path.join(workspace_path, relative_path)
+    return os.path.join(client_workspace_path, relative_path)
 
 def resolve_classpath(classpath: Optional[str]) -> str:
     """
@@ -94,7 +95,7 @@ async def handle_list_tools() -> list[types.Tool]:
                         "description": "List of Java source files or patterns (e.g. src/**/*.java)"
                     },
                     "classpath": {"type": "string"},
-                    "output_dir": {"type": "string"}
+                    "output_dir": {"type": "string", "description": "default values: ./bin"},
                 },
                 "required": ["java_files"]
             },
@@ -111,7 +112,7 @@ async def handle_list_tools() -> list[types.Tool]:
                         "description": "List of Java test files or patterns (e.g. test/**/*Test.java)"
                     },
                     "classpath": {"type": "string"},
-                    "output_dir": {"type": "string"}
+                    "output_dir": {"type": "string", "description": "default values: ./bin"},
                 },
                 "required": ["java_test_files"]
             },
@@ -123,7 +124,7 @@ async def handle_list_tools() -> list[types.Tool]:
                 "type": "object",
                 "properties": {
                     "classpath": {"type": "string"},
-                    "output_dir": {"type": "string"},
+                    "output_dir": {"type": "string", "description": "default values: ./bin"},
                     "package_name": {"type": "string"},
                     "test_classes": {
                         "type": "array",
@@ -140,10 +141,10 @@ async def handle_list_tools() -> list[types.Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "output_dir": {"type": "string"},
+                    "classfiles_root_path": {"type": "string"},
                     "package_name": {"type": "string"}
                 },
-                "required": ["output_dir"]
+                "required": ["classfiles_root_path"]
             },
         )
     ]
@@ -300,10 +301,10 @@ async def run_junit(arguments: dict) -> list[types.TextContent]:
     ]
 
 async def generate_coverage(arguments: dict) -> list[types.TextContent]:
-    output_dir = resolve_workspace_path(arguments.get("output_dir", "bin"))
+    classfiles = resolve_workspace_path(arguments.get("classfiles_root_path", "bin"))
     package_name = arguments.get("package_name", "")
     
-    jacoco_classfiles = f"{output_dir}/{package_name.replace('.', '/')}" if package_name else output_dir
+    jacoco_classfiles = f"{classfiles}/{package_name.replace('.', '/')}" if package_name else classfiles
     os.makedirs(f"{workspace_path}/jacoco-report", exist_ok=True)
     
     cmd = [
