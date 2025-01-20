@@ -15,9 +15,11 @@ server = Server("java_test_mcp")
 
 workspace_path = os.environ.get('JAVA_BUILD_WORKSPACE', './junit_jacoco_jar_path')
 client_workspace_path = os.environ.get("CLIENT_WORKSPACE", '.')
+default_class_path = os.environ.get("DEFAULT_CLASSPATH_PATH", '')
+pom_xml_path = os.environ.get("POM_XML_PATH", '')
 
 if not os.path.isdir(workspace_path):
-    from .download_jar import download, extract_files
+    from .utils import download, extract_files
     jacoco_url = "https://search.maven.org/remotecontent?filepath=org/jacoco/jacoco/0.8.12/jacoco-0.8.12.zip"
     junit_url =  "https://oss.sonatype.org/content/repositories/snapshots/org/junit/platform/junit-platform-console-standalone/1.10.6-SNAPSHOT/junit-platform-console-standalone-1.10.6-20241004.130129-1.jar"
     temp_jacoco_file = os.path.join(workspace_path, jacoco_url.split("/")[-1])
@@ -27,6 +29,13 @@ if not os.path.isdir(workspace_path):
     os.remove(temp_jacoco_file)
     download(junit_url, os.path.join(workspace_path, "junit.jar"))
 
+if pom_xml_path:
+    from .utils import classspath_from_pom
+    classpath_str = classspath_from_pom(pom_xml_path)
+    if classpath_str:
+        default_class_path = default_class_path + os.pathsep + classpath_str
+    default_class_path = classpath_str
+
 def resolve_workspace_path(relative_path: str) -> str:
     if os.path.isabs(relative_path):
         return relative_path
@@ -35,28 +44,22 @@ def resolve_workspace_path(relative_path: str) -> str:
 def resolve_classpath(classpath: Optional[str]) -> str:
     """
     Resolve classpath entries relative to client workspace
-    Handles multiple classpath entries separated by ':'
+    Handles multiple classpath entries separated by ':' or ';'
     """
     if not classpath:
+        if default_class_path != '':
+            return default_class_path
         return "."
-        
-    entries = classpath.split(":")
+
+    entries = classpath.split(os.pathsep)
     resolved_entries = []
-    
+
     for entry in entries:
-        if '*' in entry:
-            base_dir = os.path.dirname(entry)
-            base_dir = resolve_workspace_path(base_dir)
-            pattern = os.path.join(base_dir, os.path.basename(entry))
-            if '**' in pattern:
-                matched_files = glob.glob(pattern, recursive=True)
-            else:
-                matched_files = glob.glob(pattern)
-            resolved_entries.extend(matched_files)
-        else:
-            resolved_entries.append(resolve_workspace_path(entry))
-            
-    return ":".join(resolved_entries)
+        resolved_entries.append(resolve_workspace_path(entry))
+    resolved_classpath = os.pathsep.join(resolved_entries)
+    if default_class_path != '':
+        return resolved_classpath + os.pathsep + default_class_path
+    return resolved_classpath
 
 def resolve_file_list(files: List[str]) -> List[str]:
     """
@@ -93,9 +96,10 @@ async def handle_list_tools() -> list[types.Tool]:
                     "java_files": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "List of Java source files or patterns (e.g. src/**/*.java)"
+                        "description": "List of Java source files or patterns (e.g. src/Hello.java, src/**/*.java)"
                     },
-                    "classpath": {"type": "string"},
+                    "classpath": {"type": "string",
+                                  "description": "List of jar files or patterns (e.g. path/to/a.jar:path/to/lib/*)"},
                     "output_dir": {"type": "string", "description": "default values: main/bin"},
                 },
                 "required": ["java_files"]
@@ -110,9 +114,9 @@ async def handle_list_tools() -> list[types.Tool]:
                     "java_test_files": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "List of Java test files or patterns (e.g. test/**/*Test.java)"
-                    },
-                    "classpath": {"type": "string"},
+                        "description": "List of JUnit source files or patterns (e.g. src/HelloTest.java, src/**/*Test.java)"                    },
+                    "classpath": {"type": "string",
+                                  "description": "List of jar files or patterns (e.g. path/to/a.jar:path/to/lib/*)"},
                     "target_dir": {"type": "string", "description": "default values: main/bin"},
                     "output_dir": {"type": "string", "description": "default values: test/bin"},
                 },
@@ -125,7 +129,8 @@ async def handle_list_tools() -> list[types.Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "classpath": {"type": "string"},
+                    "classpath": {"type": "string",
+                                  "description": "List of jar files or patterns (e.g. path/to/a.jar:path/to/lib/*)"},
                     "target_dir": {"type": "string", "description": "default values: main/bin"},
                     "test_dir": {"type": "string", "description": "default values: test/bin"},
                     "package_name": {"type": "string"},
