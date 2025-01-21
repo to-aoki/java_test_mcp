@@ -262,10 +262,11 @@ async def compile_java_files(
             raise subprocess.CalledProcessError(
                 process.returncode, cmd, stdout, stderr
             )
+        error_files_str = ", ".join(error_files)
         return [
             types.TextContent(
                 type="text",
-                text=f"Successfully compiled {len(resolved_files)} files. Compilation failed files: {", ".join(error_files)}"
+                text=f"Successfully compiled {len(resolved_files)} files. Compilation failed files: {error_files_str}"
             )
         ]
     return [
