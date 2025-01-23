@@ -196,20 +196,21 @@ async def handle_call_tool(
 
 
 async def compile_java_files(
-        files: List[str],
-        output_dir: str,
-        classpath: str,
-        additional_classpath: str = ""
+    files: List[str],
+    output_dir: str,
+    classpath: str,
+    additional_classpath: str = ""
 ) -> list[types.TextContent]:
     resolved_files = resolve_file_list(files)
     if not resolved_files:
         raise ValueError("No Java files found to compile")
 
     os.makedirs(output_dir, exist_ok=True)
+    classpath_split = os.pathsep
 
-    full_classpath = f".:{classpath}"
+    full_classpath = classpath
     if additional_classpath:
-        full_classpath = f"{full_classpath}:{additional_classpath}"
+        full_classpath = f"{full_classpath}{classpath_split}{additional_classpath}"
 
     cmd = [
         "javac",
@@ -263,10 +264,11 @@ async def compile_java_files(
                 process.returncode, cmd, stdout, stderr
             )
         error_files_str = ", ".join(error_files)
+        resolved_files_str = '.'.join(resolved_files)
         return [
             types.TextContent(
                 type="text",
-                text=f"Successfully compiled {len(resolved_files)} files. Compilation failed files: {error_files_str}"
+                text=f"Successfully compiled {resolved_files_str}. Compilation failed files: {error_files_str}"
             )
         ]
     return [
@@ -302,12 +304,14 @@ async def run_junit(arguments: dict) -> list[types.TextContent]:
     test_classes = arguments.get("test_classes", [])
 
     junit_includes = f"{package_name}.*" if package_name else ".*"
-    
+
+    classpath_split = os.pathsep
+
     cmd = [
         "java",
         f"-javaagent:{workspace_path}/jacocoagent.jar=destfile={workspace_path}/jacoco.exec,includes={junit_includes}",
         "-cp",
-        f"{target_dir}:{test_dir}:{workspace_path}/{classpath}:{workspace_path}/junit.jar",
+        f"{target_dir}{classpath_split}{test_dir}{classpath_split}{workspace_path}/{classpath}{classpath_split}{workspace_path}/junit.jar",
         "org.junit.platform.console.ConsoleLauncher",
     ]
 
