@@ -292,7 +292,7 @@ async def junit_compile(arguments: dict) -> list[types.TextContent]:
     target_dir = resolve_workspace_path(arguments.get("target_dir", "main/bin"))
     output_dir = resolve_workspace_path(arguments.get("output_dir", "test/bin"))
     classpath = resolve_classpath(arguments.get("classpath"))
-    junit_classpath = f"{target_dir}:{workspace_path}/junit.jar"
+    junit_classpath = f"{target_dir}{os.pathsep}{workspace_path}/junit.jar"
 
     return await compile_java_files(test_files, output_dir, classpath, junit_classpath)
 
