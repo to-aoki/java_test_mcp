@@ -101,7 +101,7 @@ async def handle_list_tools() -> list[types.Tool]:
                         "description": "List of specific test classes to run (optional)"
                     }
                 },
-                "required": ["output_dir"]
+                "required": ["target_dir"]
             },
         ),
         types.Tool(
@@ -113,7 +113,7 @@ async def handle_list_tools() -> list[types.Tool]:
                     "classfiles_dir": {"type": "string"},
                     "package_name": {"type": "string"}
                 },
-                "required": ["classfiles_root_path"]
+                "required": ["classfiles_dir"]
             },
         )
     ]
