@@ -21,14 +21,14 @@ async def main():
             # Call tool
             result = await session.call_tool(
                 "java_compile", {
-                    "java_files": [os.getcwd() + "/tests/main/src/com/examples/*.java"],
+                    "source_files": [os.getcwd() + "/tests/main/src/com/examples/*.java"],
                     "output_dir": os.getcwd() + "/main/bin"
                 }
             )
             print(result)
             result = await session.call_tool(
                 "junit_compile", {
-                    "java_test_files": [os.getcwd() + "/tests/main/test/**/*Test.java"],
+                    "source_files": [os.getcwd() + "/tests/main/test/**/*Test.java"],
                     "target_dir": os.getcwd() + "/main/bin",
                     "output_dir": os.getcwd() + "/test/bin"
                 }
@@ -43,8 +43,8 @@ async def main():
             )
             print(result)
             result = await session.call_tool(
-                "generate_coverage", {
-                    "classfiles_root_path": os.getcwd() + "/main/bin",
+                "report_coverage", {
+                    "classfiles_dir": os.getcwd() + "/main/bin",
                     "package_name": "com.example",
                 }
             )
