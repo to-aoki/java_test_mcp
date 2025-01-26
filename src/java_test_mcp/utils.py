@@ -1,3 +1,5 @@
+# author: Toshihiko Aoki
+
 import os
 import re
 import shutil
