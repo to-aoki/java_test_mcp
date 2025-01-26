@@ -23,15 +23,15 @@ workspace_path = os.environ.get("CLIENT_WORKSPACE", '.')
 default_class_path = os.environ.get("DEFAULT_CLASSPATH_PATH", '')
 pom_xml_path = os.environ.get("POM_XML_PATH", '')
 
-if not os.path.isdir(workspace_path):
+if not os.path.isdir(build_path):
     jacoco_url = "https://search.maven.org/remotecontent?filepath=org/jacoco/jacoco/0.8.12/jacoco-0.8.12.zip"
     junit_url = "https://oss.sonatype.org/content/repositories/snapshots/org/junit/platform/junit-platform-console-standalone/1.10.6-SNAPSHOT/junit-platform-console-standalone-1.10.6-20241004.130129-1.jar"
-    temp_jacoco_file = os.path.join(workspace_path, jacoco_url.split("/")[-1])
-    os.makedirs(workspace_path)
+    temp_jacoco_file = os.path.join(build_path, jacoco_url.split("/")[-1])
+    os.makedirs(build_path)
     download(jacoco_url, temp_jacoco_file)
-    extract_files(temp_jacoco_file, workspace_path)
+    extract_files(temp_jacoco_file, build_path)
     os.remove(temp_jacoco_file)
-    download(junit_url, os.path.join(workspace_path, "junit.jar"))
+    download(junit_url, os.path.join(build_path, "junit.jar"))
 
 if pom_xml_path:
     classpath_str = classspath_from_pom(pom_xml_path)
@@ -54,7 +54,7 @@ async def handle_list_tools() -> list[types.Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "java_files": {
+                    "source_files": {
                         "type": "array",
                         "items": {"type": "string"},
                         "description": "List of Java source files or patterns (e.g. src/Hello.java, src/**/*.java)"
@@ -63,7 +63,7 @@ async def handle_list_tools() -> list[types.Tool]:
                                   "description": "List of jar files or patterns (e.g. path/to/a.jar:path/to/lib/*)"},
                     "output_dir": {"type": "string", "description": "default values: main/bin"},
                 },
-                "required": ["java_files"]
+                "required": ["source_files"]
             },
         ),
         types.Tool(
@@ -72,7 +72,7 @@ async def handle_list_tools() -> list[types.Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "java_test_files": {
+                    "source_files": {
                         "type": "array",
                         "items": {"type": "string"},
                         "description": "List of JUnit source files or patterns (e.g. src/HelloTest.java, src/**/*Test.java)"                    },
@@ -81,7 +81,7 @@ async def handle_list_tools() -> list[types.Tool]:
                     "target_dir": {"type": "string", "description": "default values: main/bin"},
                     "output_dir": {"type": "string", "description": "default values: test/bin"},
                 },
-                "required": ["java_test_files"]
+                "required": ["source_files"]
             },
         ),
         types.Tool(
@@ -128,9 +128,12 @@ async def handle_call_tool(
     if not arguments:
         raise ValueError("Missing arguments")
 
-    arguments['workspace_path'] = workspace_path
-    arguments['build_path'] = build_path
-    arguments['additional_classpath'] = default_class_path
+    if arguments.get('workspace_path') is None:
+        arguments['workspace_path'] = workspace_path
+    if arguments.get('build_path') is None:
+        arguments['build_path'] = build_path
+    if arguments.get('additional_classpath') is None:
+        arguments['additional_classpath'] = default_class_path
 
     try:
         if name == "java_compile":
