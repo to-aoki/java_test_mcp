@@ -12,6 +12,7 @@ import xml.etree.ElementTree as ET
 import asyncio
 import requests
 
+
 def download(download_url, file_name):
     response = requests.get(download_url, stream=True)
     if response.status_code == 200:
@@ -21,6 +22,7 @@ def download(download_url, file_name):
     else:
         raise Exception(f"Failed to download file: {response.status_code}")
 
+
 def extract_files(file_name, extract_to, ext='.jar'):
     with zipfile.ZipFile(file_name, "r") as zip_ref:
         for file in zip_ref.namelist():
@@ -29,6 +31,7 @@ def extract_files(file_name, extract_to, ext='.jar'):
                 target_path = os.path.join(extract_to, os.path.basename(file))
                 with open(target_path, "wb") as target:
                     shutil.copyfileobj(source, target)
+
 
 def classspath_from_pom(pom_path, output_file='cp.txt'):
     try:
@@ -59,6 +62,7 @@ def resolve_workspace_path(relative_path: str, workspace_path='.') -> str:
         return relative_path
     return os.path.join(workspace_path, relative_path)
 
+
 def resolve_classpath(classpath='', workspace_path='.') -> str:
     """
     Resolve classpath entries relative to client workspace
@@ -75,6 +79,7 @@ def resolve_classpath(classpath='', workspace_path='.') -> str:
             relative_path=entry, workspace_path=workspace_path))
     resolved_classpath = os.pathsep.join(resolved_entries)
     return resolved_classpath
+
 
 def resolve_file_list(files: List[str], workspace_path='.') -> List[str]:
     """
@@ -112,18 +117,19 @@ async def compile_java_files(
         *source_files
     ]
 
-    process = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE
-    )
+    error_log_file = os.path.join(output_dir, 'javac_err.log')  # follow windows(ja)
+    with open(error_log_file, 'w') as java_err:
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=java_err
+        )
     stdout, stderr = await process.communicate()
 
     if process.returncode != 0:
-        try:
-            stderr_decoded = stderr.decode('utf-8')
-        except UnicodeDecodeError:
-            stderr_decoded = stderr.decode('utf-8', errors='replace')
+        with open(error_log_file, 'r') as javac_err:
+            stderr_decoded = javac_err.read()
+
         error_files = set()
         error_pattern = re.compile(r"(.*\.java):")  # tests/src/com/examples/HelloWorldTest.java:11: error: ...
         for line in stderr_decoded.splitlines():
@@ -135,7 +141,7 @@ async def compile_java_files(
         source_files = set(source_files) - error_files
         if len(source_files) == 0:
             raise subprocess.CalledProcessError(
-                process.returncode, cmd, stdout, stderr
+                process.returncode, cmd, stdout, stderr_decoded
             )
 
         cmd = [
@@ -145,23 +151,26 @@ async def compile_java_files(
             *source_files
         ]
 
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
+        with open(error_log_file, 'w') as java_err:
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=java_err
+            )
         stdout, stderr = await process.communicate()
 
         if process.returncode != 0:
+            with open(error_log_file, 'r') as javac_err:
+                stderr_decoded = javac_err.read()
             raise subprocess.CalledProcessError(
-                process.returncode, cmd, stdout, stderr
+                process.returncode, cmd, stdout, stderr_decoded
             )
         return {
             "status": "partial_success",
             "result": {
                 "compiled_files": source_files,
                 "failed_files": error_files,
-                "stderr": stderr.decode('utf-8')
+                "stderr": stderr_decoded
             },
             "cmd": ' '.join(cmd)
         }
@@ -170,14 +179,13 @@ async def compile_java_files(
         "result": {
             "compiled_files": source_files,
         },
-        "cmd": ' '.join(cmd),
-        "stdout": stdout.decode('utf-8')
+        "cmd": ' '.join(cmd)
     }
 
 async def java_compile(
-    source_files: List[str]=[],
-    output_dir: str='main/bin',
-    classpath: str='',
+    source_files: List[str] = [],
+    output_dir: str = 'main/bin',
+    classpath: str = '',
     workspace_path='.',
     additional_classpath='',
     **kwargs,
@@ -288,7 +296,7 @@ async def run_junit(
     return {
         "cmd": ' '.join(cmd),
         "result" : {
-            "summary": junit_result_summary(stdout.decode('utf-8'))
+            "summary": junit_result_summary(stdout.decode())
         }
     }
 
