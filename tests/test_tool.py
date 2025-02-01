@@ -30,7 +30,7 @@ async def main():
                 "junit_compile", {
                     "source_files": [os.getcwd() + "/tests/main/test/**/*Test.java"],
                     "target_dir": os.getcwd() + "/main/bin",
-                    "output_dir": os.getcwd() + "/test/bin"
+                    "test_dir": os.getcwd() + "/test/bin"
                 }
             )
             print(result)

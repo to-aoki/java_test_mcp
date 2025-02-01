@@ -1,4 +1,6 @@
 # author: Toshihiko Aoki
+# licence: MIT
+
 import os
 import subprocess
 
@@ -69,18 +71,27 @@ async def handle_list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="junit_compile",
-            description="Compile JUnit test files",
+            description="Compile JUnit source files",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "source_files": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "List of JUnit source files or patterns (e.g. src/HelloTest.java, src/**/*Test.java)"                    },
-                    "classpath": {"type": "string",
-                                  "description": "List of jar files or patterns (e.g. path/to/a.jar:path/to/lib/*)"},
-                    "target_dir": {"type": "string", "description": "default values: main/bin"},
-                    "output_dir": {"type": "string", "description": "default values: test/bin"},
+                        "description":
+                            "List of JUnit source files or patterns (e.g. src/HelloTest.java, src/**/*Test.java)"
+                    },
+                    "classpath": {
+                        "type": "string",
+                        "description": "List of jar files or patterns (e.g. path/to/a.jar:path/to/lib/*)"
+                    },
+                    "target_dir": {
+                        "type": "string",
+                        "description": "Compiled class directory to test (default: main/bin)",
+                    },
+                    "test_dir": {
+                        "type": "string", "description": "Directory to output Junit classes (default: test/bin)",
+                    },
                 },
                 "required": ["source_files"]
             },
@@ -93,8 +104,13 @@ async def handle_list_tools() -> list[types.Tool]:
                 "properties": {
                     "classpath": {"type": "string",
                                   "description": "List of jar files or patterns (e.g. path/to/a.jar:path/to/lib/*)"},
-                    "target_dir": {"type": "string", "description": "default values: main/bin"},
-                    "test_dir": {"type": "string", "description": "default values: test/bin"},
+                    "target_dir": {"type": "string",
+                                   "description": "Compiled class directory to test (default: main/bin)"
+                    },
+                    "test_dir": {
+                        "type": "string",
+                        "description": "Directory to output Junit classes (default: test/bin)"
+                    },
                     "package_name": {"type": "string"},
                     "test_classes": {
                         "type": "array",
@@ -111,10 +127,15 @@ async def handle_list_tools() -> list[types.Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "classfiles_dir": {"type": "string"},
-                    "package_name": {"type": "string"}
+                    "classfiles_dir": {
+                        "type": "string",
+                        "description": "Compiled class directory to test (default: main/bin)",
+                    },
+                    "package_name": {
+                        "type": "string",
+                        "description": "Report target (e.g. com.example.report.target)",
+                    },
                 },
-                "required": ["classfiles_dir"]
             },
         )
     ]
@@ -172,10 +193,18 @@ async def handle_call_tool(
         else:
             raise ValueError(f"Unknown tool: {name}")
     except subprocess.CalledProcessError as e:
+        std_error = 'unknown (decode failed).'
+        if isinstance(e.stderr, str):
+            std_error = e.stderr
+        else:
+            try:
+                std_error = e.stderr.decode()
+            except:
+                pass
         return [
             types.TextContent(
                 type="text",
-                text=f"Command failed with exit code {e.returncode}:\n{e.stderr.decode()}",
+                text=f"Command failed with exit code {e.returncode}:\n{std_error}",
             )
         ]
     except Exception as e:
