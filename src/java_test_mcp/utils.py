@@ -261,7 +261,7 @@ async def run_junit(
     classpath_split = os.pathsep
     if additional_classpath:
         classpath = f"{classpath}{classpath_split}{additional_classpath}"
-    junit_includes = f"{package_name}.*" if package_name else ".*"
+    junit_includes = f"{package_name}.*" if package_name else "*"
 
     jar_path = os.path.join(build_path, junit_jar)
     all_classpath = f"{classpath}{classpath_split}{target_dir}{classpath_split}{test_dir}{classpath_split}{jar_path}"
@@ -311,11 +311,13 @@ async def report_coverage(
     jacoco_exec='jacoco.exec',
     jacoco_report_dir="jacoco-report",
     jacoco_report_file="jacoco.xml",
-    ** kwargs,
+    **kwargs,
 ) -> dict:
-
     classfiles = resolve_workspace_path(classfiles_dir, workspace_path=workspace_path)
-    jacoco_classfiles = f"{classfiles}/{package_name.replace('.', '/')}" if package_name else classfiles
+
+    jacoco_classfiles = classfiles
+    if package_name:
+        jacoco_classfiles = f"{classfiles}/{package_name.replace('.', '/')}"
 
     report_path = os.path.join(workspace_path, jacoco_report_dir)
     os.makedirs(report_path, exist_ok=True)
